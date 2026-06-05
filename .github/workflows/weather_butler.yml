@@ -2,9 +2,9 @@ name: 🌤️ Weather Butler - AI Weather Assistant
 
 on:
   schedule:
-    # 每小时整点运行一次（使用 UTC 时间，北京时间 = UTC+8）
-    # 所以 8:00 北京 = 0:00 UTC，13:00 北京 = 5:00 UTC
-    - cron: '0 * * * *'
+    # 仅在 8:00 和 13:00 北京时间运行（恶劣天气会在脚本内实时推送）
+    # 北京时间 = UTC+8，所以 8:00 = 0:00 UTC，13:00 = 5:00 UTC
+    - cron: '0 0,5 * * *'
   workflow_dispatch:
     # 支持手动触发，方便测试
 

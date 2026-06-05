@@ -375,14 +375,17 @@ def main():
     if alerts:
         logger.warning(f"🚨 检测到 {len(alerts)} 项恶劣天气")
         send_bark_alert(alerts, location_name)
-        # 也打印到日志
         for a in alerts:
             logger.warning(f"  {a['message']}")
 
-    # 定时报告
+    # 定时报告（8:00 或 13:00）
     if report_type:
         logger.info(f"📋 生成 {report_type} 管家报告...")
         send_bark_ai_report(data, location_info, report_type)
+    else:
+        # 非定时时间也推送简要天气通知
+        logger.info("📱 推送简要天气通知...")
+        send_bark_summary(data, location_info, "summary")
 
     logger.info("✅ 任务完成")
     logger.info(f"   时间: {now.strftime('%Y-%m-%d %H:%M:%S')}")
