@@ -278,17 +278,15 @@ def send_bark_ai_report(data, location_info, report_type):
     if len(body) > 450:
         body = body[:447] + "..."
 
-    # 固定格式的 Emoji 天气卡片（确保在不同设备上显示一致）
+    # 固定格式的 Emoji 天气卡片（纯文本，无特殊符号，确保 iOS 渲染一致）
     uvi_level = "低" if uvi < 3 else ("中等" if uvi < 6 else ("高" if uvi < 8 else "很高"))
     weather_card = (
-        f"{'='*28}\n"
-        f"📍 {city} {label}\n"
-        f"{'='*28}\n"
-        f"{weather_icon} 当前 {temp:.0f}°C (体感 {feels:.0f}°C)\n"
-        f"{'─'*28}\n"
-        f"💧 湿度 {humidity}% | 🌬️ 风速 {wind_speed:.0f}m/s\n"
-        f"☀️ UV指数 {uvi:.0f} ({uvi_level}) | 🌥️ {weather_desc}\n"
-        f"{'='*28}"
+        f"📍 {city} {label}\n\n"
+        f"{weather_icon} 当前 {temp:.0f}°C  体感 {feels:.0f}°C\n\n"
+        f"💧 湿度 {humidity}%\n"
+        f"🌬️ 风速 {wind_speed:.0f} m/s\n"
+        f"☀️ UV指数 {uvi:.0f} ({uvi_level})\n"
+        f"🌥️ {weather_desc}"
     )
 
     # 组装推送正文：卡片 + AI 分析
