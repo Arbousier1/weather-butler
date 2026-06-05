@@ -217,12 +217,17 @@ def send_bark(title, body, group="天气管家", sound="alarm.caf", url=None):
         return False
     import urllib.parse
     try:
-        api_url = f"https://api.day.app/{bark_key}/{urllib.parse.quote(title)}/{urllib.parse.quote(body)}"
-        params = [f"group={urllib.parse.quote(group)}", f"sound={sound}"]
+        # 使用 POST 方式，Secret 不出现在 URL 中（避免 GitHub Actions 脱敏）
+        api_url = f"https://api.day.app/{bark_key}"
+        payload = {
+            "title": title,
+            "body": body,
+            "group": group,
+            "sound": sound,
+        }
         if url:
-            params.append(f"icon={urllib.parse.quote(url)}")
-        api_url += "?" + "&".join(params)
-        resp = requests.get(api_url, timeout=8)
+            payload["icon"] = url
+        resp = requests.post(api_url, data=payload, timeout=8)
         result = resp.json()
         if result.get("code") == 200:
             logger.info(f"📲 Bark 推送成功: {title[:30]}...")

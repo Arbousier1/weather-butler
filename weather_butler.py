@@ -381,7 +381,7 @@ def fetch_weather_with_rotation(lat, lon, config, lang=None, units=None, exclude
 # ============================================================
 
 def send_bark(title, body, group="天气管家", sound="alarm.caf", url=None):
-    """通过 Bark 发送推送通知到 iPhone"""
+    """通过 Bark 发送推送通知到 iPhone（POST 方式避免 URL 脱敏）"""
     config = load_env()
     bark_key = config.get("bark_key", "")
     if not bark_key:
@@ -390,14 +390,17 @@ def send_bark(title, body, group="天气管家", sound="alarm.caf", url=None):
 
     import urllib.parse
     try:
-        # 基础 URL
-        api_url = f"https://api.day.app/{bark_key}/{urllib.parse.quote(title)}/{urllib.parse.quote(body)}"
-        extra = f"?group={urllib.parse.quote(group)}&sound={sound}"
+        api_url = f"https://api.day.app/{bark_key}"
+        payload = {
+            "title": title,
+            "body": body,
+            "group": group,
+            "sound": sound,
+        }
         if url:
-            extra += f"&url={urllib.parse.quote(url)}"
-        api_url += extra
+            payload["icon"] = url
 
-        resp = requests.get(api_url, timeout=8)
+        resp = requests.post(api_url, data=payload, timeout=8)
         resp.raise_for_status()
         result = resp.json()
         if result.get("code") == 200:
