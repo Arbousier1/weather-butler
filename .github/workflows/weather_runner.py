@@ -99,6 +99,69 @@ def fetch_weather(lat, lon, keys, lang="zh_cn", units="metric"):
     logger.error("❌ 所有 API Key 均失败")
     return None
 
+# 天气图标（用于 Bark 推送）
+WEATHER_ICONS = {
+    # 晴
+    800: "☀️",  # 晴
+    # 少云/多云
+    801: "🌤️",  # 少云
+    802: "⛅",  # 多云
+    803: "🌥️",  # 阴
+    804: "☁️",  # 阴天
+    # 雨
+    500: "🌧️",  # 小雨
+    501: "🌧️",  # 中雨
+    502: "🌧️",  # 大雨
+    503: "⛈️",  # 暴雨
+    504: "⛈️",  # 大暴雨
+    511: "🌨️",  # 冻雨
+    520: "🌦️",  # 阵雨
+    521: "🌦️",  # 阵雨
+    522: "🌧️",  # 阵雨
+    # 雪
+    600: "🌨️",  # 小雪
+    601: "❄️",  # 中雪
+    602: "❄️",  # 大雪
+    611: "🌨️",  # 雨夹雪
+    # 雷
+    200: "⛈️",  # 雷阵雨
+    201: "⛈️",  # 雷阵雨
+    202: "⛈️",  # 雷阵雨
+    210: "⛈️",
+    211: "⛈️",
+    212: "⛈️",
+    221: "⛈️",
+    # 雾/霾
+    701: "🌫️",
+    711: "🌫️",
+    721: "😷",
+    741: "🌫️",
+    761: "🌪️",
+    771: "💨",
+    781: "🌪️",
+    # 毛毛雨
+    300: "🌧️",
+    301: "🌧️",
+    302: "🌧️",
+    310: "🌧️",
+    311: "🌧️",
+    312: "🌧️",
+}
+
+def get_weather_icon(data):
+    """获取天气图标和 OpenWeatherMap 图标 URL"""
+    current = data.get("current", {})
+    weather_list = current.get("weather", [])
+    if not weather_list:
+        return "🌤️", None
+    wid = weather_list[0].get("id", 800)
+    icon = WEATHER_ICONS.get(wid, "🌤️")
+    # OpenWeatherMap 图标 URL
+    icon_code = weather_list[0].get("icon", "01d")
+    icon_url = f"https://openweathermap.org/img/wn/{icon_code}@2x.png"
+    return icon, icon_url
+
+
 # ============================================================
 # 恶劣天气检测
 # ============================================================
@@ -147,18 +210,22 @@ def check_severe_weather(data):
 # Bark 推送
 # ============================================================
 
-def send_bark(title, body, group="天气管家", sound="alarm.caf"):
+def send_bark(title, body, group="天气管家", sound="alarm.caf", url=None):
     bark_key = os.getenv("BARK_KEY", "")
     if not bark_key:
         logger.debug("Bark 未配置")
         return False
     import urllib.parse
     try:
-        url = f"https://api.day.app/{bark_key}/{urllib.parse.quote(title)}/{urllib.parse.quote(body)}?group={urllib.parse.quote(group)}&sound={sound}"
-        resp = requests.get(url, timeout=8)
+        api_url = f"https://api.day.app/{bark_key}/{urllib.parse.quote(title)}/{urllib.parse.quote(body)}"
+        params = [f"group={urllib.parse.quote(group)}", f"sound={sound}"]
+        if url:
+            params.append(f"icon={urllib.parse.quote(url)}")
+        api_url += "?" + "&".join(params)
+        resp = requests.get(api_url, timeout=8)
         result = resp.json()
         if result.get("code") == 200:
-            logger.info(f"📲 Bark 推送成功: {title}")
+            logger.info(f"📲 Bark 推送成功: {title[:30]}...")
             return True
         logger.warning(f"⚠️ Bark 推送失败: {result}")
     except Exception as e:
@@ -177,13 +244,20 @@ def send_bark_alert(alerts, city):
 
 def send_bark_ai_report(data, location_info, report_type):
     city = location_info.get("city", "未知")
-    label = "🌅 早安" if report_type == "morning" else "☀️ 午后"
+    label = "🌅 早安" if report_type == "morning" else ("☀️ 午后" if report_type == "afternoon" else "📋 天气快报")
     current = data.get("current", {})
     temp = current.get("temp", 0)
     weather_list = current.get("weather", [])
     weather_desc = WEATHER_CONDITIONS_CN.get(
         weather_list[0]["id"], weather_list[0].get("description", "未知")
     ) if weather_list else "未知"
+    feels = current.get("feels_like", temp)
+    humidity = current.get("humidity", 0)
+    wind_speed = current.get("wind_speed", 0)
+    uvi = current.get("uvi", 0)
+
+    # 获取天气图标
+    weather_icon, icon_url = get_weather_icon(data)
 
     ai_report = generate_ai_butler_report(data, location_info, report_type)
     if not ai_report or len(ai_report) < 30:
@@ -198,7 +272,45 @@ def send_bark_ai_report(data, location_info, report_type):
     body = ai_report.strip()
     if len(body) > 450:
         body = body[:447] + "..."
-    send_bark(f"{label} | {city} {weather_desc} {temp:.0f}°C", body, group=f"天气汇总/{report_type}", sound="glass.caf")
+
+    # 组装视觉化的标题
+    # 🌅☀️ 23°C | 象山 阴天 | 体感24°C 💧84% 🌬️3m/s
+    title_parts = [
+        f"{label}",
+        f"{weather_icon} {temp:.0f}°C",
+        f"| {city} {weather_desc}",
+        f"| 体感{feels:.0f}°C",
+        f"💧{humidity}% 🌬️{wind_speed:.0f}m/s",
+    ]
+    title = " ".join(title_parts)
+
+    # 生成视觉化天气卡片（ASCII 风格）
+    uvi_level = "低" if uvi < 3 else ("中等" if uvi < 6 else ("高" if uvi < 8 else "很高"))
+    card_lines = [
+        f"╔══════════════════════════════════╗",
+        f"║  {city}    {label}  ║",
+        f"╠══════════════════════════════════╣",
+        f"║     {weather_icon} {temp:.0f}°C  体感{feels:.0f}°C       ║",
+        f"║  ───────────────────────────────  ║",
+        f"║  💧湿度 {humidity}%   🌬️风速 {wind_speed:.0f}m/s   ║",
+        f"║  ☀️ UV指数 {uvi:.0f}（{uvi_level}）               ║",
+        f"║  🌥️ {weather_desc}                  ║",
+        f"╚══════════════════════════════════╝",
+    ]
+    weather_card = "\n".join(card_lines)
+
+    # 组装推送正文：卡片 + AI 分析
+    body = ai_report.strip()
+    if len(body) > 350:
+        body = body[:347] + "..."
+
+    full_body = weather_card + "\n\n" + body
+
+    if len(full_body) > 1000:
+        # 太长就只用卡片 + 截断 AI 报告
+        full_body = weather_card + "\n\n" + body[:400]
+
+    send_bark(title, full_body, group=f"天气/{report_type}", sound="glass.caf")
 
 def send_bark_summary(data, location_info, report_type):
     city = location_info.get("city", "未知")
