@@ -1,87 +1,146 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""生成天气卡片图片"""
-from PIL import Image, ImageDraw, ImageFont
+"""生成天气卡片图片（含天气图标）"""
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
+import requests
 import math
+import os
 
-# 天气图标像素艺术（简化版，用emoji风格表示）
-def create_weather_card(weather_desc, temp, feels_like, humidity, wind_speed, weather_icon, report_type, location_name):
-    """生成一张天气卡片图片"""
+def hex2rgb(h):
+    h = h.lstrip('#')
+    return tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
+
+def create_weather_card(weather_desc, temp, feels_like, humidity, wind_speed, weather_icon, report_type, location_name, icon_code="04d"):
+    """生成一张精美的天气卡片 PNG，返回 base64 data URL"""
     width, height = 380, 220
 
-    # 背景色：根据天气类型
-    if "晴" in weather_desc or "☀️" in weather_icon:
-        bg_r, bg_g, bg_b = 135, 206, 250  # 浅蓝天
+    # 背景色方案
+    if "晴" in weather_desc:
+        bg = (135, 206, 250)
     elif "雨" in weather_desc:
-        bg_r, bg_g, bg_b = 70, 130, 180   # SteelBlue
-    elif "阴" in weather_desc or "多云" in weather_desc or "☁️" in weather_icon:
-        bg_r, bg_g, bg_b = 105, 105, 120  # 深灰蓝
+        bg = (70, 130, 180)
+    elif "阴" in weather_desc or "多云" in weather_desc:
+        bg = (90, 100, 130)
     elif "雪" in weather_desc:
-        bg_r, bg_g, bg_b = 176, 224, 230  # 浅蓝
+        bg = (176, 224, 230)
     else:
-        bg_r, bg_g, bg_b = 100, 149, 237  # CornflowerBlue
+        bg = (100, 149, 237)
 
-    img = Image.new("RGB", (width, height), (bg_r, bg_g, bg_b))
+    # 创建背景
+    img = Image.new("RGB", (width, height), bg)
     draw = ImageDraw.Draw(img)
 
-    # 圆角矩形背景（简单用矩形+渐变感）
-    # 添加半透明覆盖增加层次
-    overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-    overlay_draw = ImageDraw.Draw(overlay)
-
-    # 绘制渐变底部
-    for y in range(height // 2, height):
-        alpha = int(60 * (y - height // 2) / (height // 2))
-        overlay_draw.rectangle([(0, y), (width, y + 1)], fill=(0, 0, 0, alpha))
-
-    img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
-
-    # 重新获取 draw
-    draw = ImageDraw.Draw(img)
+    # 添加装饰性渐变底部
+    for y in range(height - 60, height):
+        alpha = int(60 * (y - (height - 60)) / 60)
+        overlay_color = (
+            max(0, bg[0] - alpha * 2),
+            max(0, bg[1] - alpha),
+            min(255, bg[2] + alpha)
+        )
+        draw.line([(0, y), (width, y)], fill=overlay_color)
 
     # 尝试加载字体
-    try:
-        # 尝试系统字体
-        font_large = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 48)
-        font_medium = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 22)
-        font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 16)
-        font_tiny = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 14)
-    except:
-        # 使用默认字体
+    font_paths = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    ]
+    font_large, font_medium, font_small, font_tiny = None, None, None, None
+    for fp in font_paths:
+        if os.path.exists(fp):
+            try:
+                font_large = ImageFont.truetype(fp, 52)
+                font_medium = ImageFont.truetype(fp, 24)
+                font_small = ImageFont.truetype(fp, 18)
+                font_tiny = ImageFont.truetype(fp, 14)
+                break
+            except:
+                continue
+    if font_large is None:
         font_large = ImageFont.load_default()
-        font_medium = ImageFont.load_default()
-        font_small = ImageFont.load_default()
-        font_tiny = ImageFont.load_default()
+        font_medium = font_large
+        font_small = font_large
+        font_tiny = font_large
 
-    # 绘制分隔线
-    draw.line([(20, 100), (width - 20, 100)], fill=(255, 255, 255, 80), width=1)
-
-    # 绘制内容
     white = (255, 255, 255)
-    light_blue = (200, 230, 255)
+    light = (200, 220, 255)
+    accent = (255, 230, 100)
 
-    # 顶部：位置和时间
-    draw.text((width // 2, 15), location_name, fill=light_blue, font=font_small, anchor="mt")
-    draw.text((width // 2, 35), report_type, fill=white, font=font_medium, anchor="mt")
+    # ===== 左侧：天气图标区域 =====
+    # 下载 OpenWeatherMap 天气图标
+    icon_url = f"https://openweathermap.org/img/wn/{icon_code}@2x.png"
+    try:
+        icon_resp = requests.get(icon_url, timeout=5)
+        if icon_resp.status_code == 200:
+            from io import BytesIO
+            weather_icon_img = Image.open(BytesIO(icon_resp.content)).convert("RGBA")
+            # 调整图标大小
+            icon_size = 90
+            weather_icon_img = weather_icon_img.resize((icon_size, icon_size), Image.LANCZOS)
+            # 粘贴到卡片上
+            img.paste(weather_icon_img, (25, 60), weather_icon_img)
+    except Exception:
+        # 图标下载失败，用 emoji 文字代替
+        pass
 
-    # 中部：天气图标（大emoji占位）
-    draw.text((30, 60), weather_icon, fill=white, font=font_large)
+    # ===== 主温度 =====
+    temp_str = f"{temp:.0f}°"
+    draw.text((125, 35), temp_str, fill=white, font=font_large)
 
-    # 温度（主温度）
-    draw.text((130, 50), f"{temp:.0f}°", fill=white, font=font_large)
-    draw.text((200, 55), "C", fill=light_blue, font=font_medium)
+    # ===== 位置 + 时间 =====
+    draw.text((20, 8), location_name, fill=light, font=font_tiny)
+    draw.text((20, 25), report_type, fill=light, font=font_small)
+
+    # ===== 分隔线 =====
+    draw.line([(120, 50), (120, 170)], fill=(255, 255, 255, 60), width=1)
+
+    # ===== 右侧：详细数据 =====
+    x_data = 140
 
     # 体感温度
-    draw.text((130, 100), f"体感 {feels_like:.0f}°C", fill=light_blue, font=font_tiny)
+    draw.text((x_data, 50), f"体感温度  {feels_like:.0f}°C", fill=white, font=font_small)
+
+    # 湿度
+    draw.text((x_data, 75), f"💧 湿度     {humidity}%", fill=white, font=font_small)
+
+    # 风力
+    draw.text((x_data, 100), f"🌬️ 风速     {wind_speed:.1f} m/s", fill=white, font=font_small)
 
     # 天气描述
-    draw.text((240, 55), weather_desc, fill=white, font=font_medium)
+    draw.text((x_data, 125), f"🌥️ {weather_desc}", fill=white, font=font_small)
 
-    # 底部：湿度和风力
-    draw.text((25, 140), f"💧 湿度 {humidity}%", fill=white, font=font_small)
-    draw.text((25, 165), f"🌬️ 风速 {wind_speed:.1f} m/s", fill=white, font=font_small)
+    # ===== 底部装饰 =====
+    draw.line([(15, 160), (width - 15, 160)], fill=(255, 255, 255, 40), width=1)
 
-    # 右侧：更多信息（降水概率等）
-    draw.text((25, 195), f"🌤️ 天气管家 · AI智能分析", fill=light_blue, font=font_tiny)
+    # 温度计可视化条
+    temp_ratio = max(0, min(1, (temp - 0) / 40))  # 0-40度映射到 0-1
+    bar_width = int(300 * temp_ratio)
+    draw.rectangle([(x_data, 172), (x_data + 300, 185)], fill=(40, 40, 60))
+    draw.rectangle([(x_data, 172), (x_data + bar_width, 185)], fill=(255, 100, 80) if temp > 25 else (80, 160, 255) if temp < 15 else (100, 200, 150))
+    draw.text((x_data, 168), "🌡️ 体感温度指示", fill=light, font=font_tiny)
+    draw.text((x_data + bar_width + 5, 173), f"{temp:.0f}°", fill=white, font=font_tiny)
+
+    # ===== 底部品牌 =====
+    draw.text((width // 2, 200), "🤖 AI Weather Butler", fill=(180, 200, 220), font=font_tiny, anchor="mt")
 
     return img
+
+
+def weather_card_to_base64(img, format="PNG"):
+    """将 PIL Image 转为 base64 data URL"""
+    from io import BytesIO
+    buffer = BytesIO()
+    img.save(buffer, format=format, quality=85)
+    import base64
+    b64 = base64.b64encode(buffer.getvalue()).decode()
+    return f"data:image/{format.lower()};base64,{b64}"
+
+
+if __name__ == "__main__":
+    # 测试
+    card = create_weather_card("阴天", 23, 24, 82, 2.5, "☁️", "📋 天气快报", "宁波象山", "04d")
+    data_url = weather_card_to_base64(card)
+    print(f"图片 base64 长度: {len(data_url)}")
+    card.save("/tmp/test_weather_card.png")
+    print("测试图片已保存到 /tmp/test_weather_card.png")

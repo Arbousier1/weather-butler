@@ -278,36 +278,26 @@ def send_bark_ai_report(data, location_info, report_type):
     if len(body) > 450:
         body = body[:447] + "..."
 
-    # 组装视觉化的标题
-    # 🌅☀️ 23°C | 象山 阴天 | 体感24°C 💧84% 🌬️3m/s
-    title_parts = [
-        f"{label}",
-        f"{weather_icon} {temp:.0f}°C",
-        f"| {city} {weather_desc}",
-        f"| 体感{feels:.0f}°C",
-        f"💧{humidity}% 🌬️{wind_speed:.0f}m/s",
-    ]
-    title = " ".join(title_parts)
-
-    # 生成视觉化天气卡片（ASCII 风格）
+    # 固定格式的 Emoji 天气卡片（确保在不同设备上显示一致）
     uvi_level = "低" if uvi < 3 else ("中等" if uvi < 6 else ("高" if uvi < 8 else "很高"))
-    card_lines = [
-        f"╔══════════════════════════════════╗",
-        f"║  {city}    {label}  ║",
-        f"╠══════════════════════════════════╣",
-        f"║     {weather_icon} {temp:.0f}°C  体感{feels:.0f}°C       ║",
-        f"║  ───────────────────────────────  ║",
-        f"║  💧湿度 {humidity}%   🌬️风速 {wind_speed:.0f}m/s   ║",
-        f"║  ☀️ UV指数 {uvi:.0f}（{uvi_level}）               ║",
-        f"║  🌥️ {weather_desc}                  ║",
-        f"╚══════════════════════════════════╝",
-    ]
-    weather_card = "\n".join(card_lines)
+    weather_card = (
+        f"{'='*28}\n"
+        f"📍 {city} {label}\n"
+        f"{'='*28}\n"
+        f"{weather_icon} 当前 {temp:.0f}°C (体感 {feels:.0f}°C)\n"
+        f"{'─'*28}\n"
+        f"💧 湿度 {humidity}% | 🌬️ 风速 {wind_speed:.0f}m/s\n"
+        f"☀️ UV指数 {uvi:.0f} ({uvi_level}) | 🌥️ {weather_desc}\n"
+        f"{'='*28}"
+    )
 
     # 组装推送正文：卡片 + AI 分析
     body = ai_report.strip()
     if len(body) > 350:
         body = body[:347] + "..."
+
+    # 固定标题格式：城市 + 天气 + 温度
+    title = f"{city} {weather_icon} {weather_desc} {temp:.0f}°C"
 
     full_body = weather_card + "\n\n" + body
 
