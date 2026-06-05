@@ -343,6 +343,13 @@ def call_openrouter(messages, temperature=0.8, max_tokens=800):
     try:
         resp = requests.post(url, headers=headers, json=payload, timeout=30)
         resp.raise_for_status()
+        # 处理响应中的空白字符（OpenRouter 会在 JSON 前加换行/空格）
+        raw = resp.content
+        start = raw.find(b'{')
+        if start >= 0:
+            json_text = raw[start:].decode('utf-8')
+            result = json.loads(json_text)
+            return result["choices"][0]["message"]["content"].strip()
         return resp.json()["choices"][0]["message"]["content"].strip()
     except Exception as e:
         logger.error(f"❌ OpenRouter API 失败: {e}")
