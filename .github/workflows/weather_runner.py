@@ -378,14 +378,10 @@ def main():
         for a in alerts:
             logger.warning(f"  {a['message']}")
 
-    # 定时报告（8:00 或 13:00）
-    if report_type:
-        logger.info(f"📋 生成 {report_type} 管家报告...")
-        send_bark_ai_report(data, location_info, report_type)
-    else:
-        # 非定时时间也推送简要天气通知
-        logger.info("📱 推送简要天气通知...")
-        send_bark_summary(data, location_info, "summary")
+    # 每次运行都生成 AI 管家报告并推送
+    label = "🌅 早安" if report_type == "morning" else ("☀️ 午后" if report_type == "afternoon" else "📋 天气快报")
+    logger.info(f"🤖 生成 AI 管家报告...")
+    send_bark_ai_report(data, location_info, report_type or "summary")
 
     logger.info("✅ 任务完成")
     logger.info(f"   时间: {now.strftime('%Y-%m-%d %H:%M:%S')}")
