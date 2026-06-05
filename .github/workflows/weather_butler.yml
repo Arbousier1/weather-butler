@@ -39,10 +39,10 @@ jobs:
         env:
           # OpenWeatherMap 多 Key 轮询（用逗号分隔）
           API_KEYS: ${{ secrets.API_KEYS }}
-          # 位置（公开变量，日志中会显示）
-          LAT: ${{ vars.LAT }}
-          LON: ${{ vars.LON }}
-          LOCATION_NAME: ${{ vars.LOCATION_NAME }}
+          # 位置（Secrets，加密存储）
+          LAT: ${{ secrets.LAT }}
+          LON: ${{ secrets.LON }}
+          LOCATION_NAME: ${{ secrets.LOCATION_NAME }}
           # 语言和单位
           LANG: zh_cn
           UNITS: metric

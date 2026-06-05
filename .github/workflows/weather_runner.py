@@ -441,9 +441,12 @@ def main():
     api_keys = [k.strip() for k in api_keys_str.split(",") if k.strip()]
     logger.info(f"🔑 已加载 {len(api_keys)} 个 API Key")
 
-    lat = float(os.getenv("LAT", "29.4768"))
-    lon = float(os.getenv("LON", "121.8634"))
-    location_name = os.getenv("LOCATION_NAME", "宁波象山")
+    def get_env(key, fallback):
+        val = os.getenv(key, "")
+        return val if val.strip() else fallback
+    lat = float(get_env("LAT", "29.4768"))
+    lon = float(get_env("LON", "121.8634"))
+    location_name = get_env("LOCATION_NAME", "宁波象山")
     lang = os.getenv("LANG", "zh_cn")
     units = os.getenv("UNITS", "metric")
 
